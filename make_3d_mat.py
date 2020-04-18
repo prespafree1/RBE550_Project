@@ -277,54 +277,44 @@ def make_obs_models(obs_list, file_name):
 
         f_new.close()
 
-def plot_cube(cube_definition):
+def plot_obstacles(obs_list, fig):
     """
-    Visualization courtesy of: https://stackoverflow.com/questions/44881885/python-draw-parallelepiped
-    :param cube_definition:
+    Add list of cube obstacles to figure
+    :param obs_list: list of cube obstacles
+    :param fig: figure to plot in
     :return:
     """
 
-    cube_definition_array = [np.array(list(item)) for item in cube_definition]
+    for i in range(len(obs_list)):
+        points = obs_list[i]
 
-    points = []
-    points += cube_definition_array
-    vectors = [
-        cube_definition_array[1] - cube_definition_array[0],
-        cube_definition_array[2] - cube_definition_array[0],
-        cube_definition_array[3] - cube_definition_array[0]
-    ]
+        # Add other 4 points
+        p5 = [points[1][0],points[2][1],0]
+        p6 = [points[1][0],points[1][1],points[3][2]]
+        p7 = [points[2][0], points[2][1], points[3][2]]
+        p8 = [points[1][0],points[2][1], points[3][2]]
+        points.append(p5)
+        points.append(p6)
+        points.append(p7)
+        points.append(p8)
 
-    points += [cube_definition_array[0] + vectors[0] + vectors[1]]
-    points += [cube_definition_array[0] + vectors[0] + vectors[2]]
-    points += [cube_definition_array[0] + vectors[1] + vectors[2]]
-    points += [cube_definition_array[0] + vectors[0] + vectors[1] + vectors[2]]
+        edges = [
+            [points[0], points[1], points[4], points[2]],
+            [points[0], points[1], points[5], points[3]],
+            [points[3], points[5], points[7], points[6]],
+            [points[6], points[7], points[4], points[2]],
+            [points[0], points[2], points[6], points[3]],
+            [points[1], points[4], points[7], points[5]]
+        ]
 
-    points = np.array(points)
+        # Plot cube
+        faces = Poly3DCollection(edges, linewidths=1, edgecolors='k')
+        faces.set_facecolor((1, 0.5, 0, 1))
 
-    edges = [
-        [points[0], points[3], points[5], points[1]],
-        [points[1], points[5], points[7], points[4]],
-        [points[4], points[2], points[6], points[7]],
-        [points[2], points[6], points[3], points[0]],
-        [points[0], points[2], points[4], points[1]],
-        [points[3], points[6], points[7], points[5]]
-    ]
+        fig.add_collection3d(faces)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    faces = Poly3DCollection(edges, linewidths=1, edgecolors='k')
-    faces.set_facecolor((0,0,1,0.1))
-
-    ax.add_collection3d(faces)
-
-    # Plot the points themselves to force the scaling of the axes
-    ax.scatter(points[:,0], points[:,1], points[:,2], s=0)
-
-    ax.set_aspect('equal')
-
-
-
+        # Plot the points themselves to force the scaling of the axes
+        # fig.scatter(points[:][0], points[:][1], points[:][2], s=0)
 
 def main():
 
@@ -346,7 +336,25 @@ def main():
     Make new obstacle list
     """
     obs_list = make_obs_list(h_map_file)
-    make_obs_models(obs_list,"obstacle_list_v5.txt")
+    # make_obs_models(obs_list,"obstacle_list_v5.txt")
+
+    """
+    Init figure plot
+    """
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_xlim([0, x_blocks*block_w + (x_blocks + 1)*street_w])
+    ax.set_ylim([0, y_blocks*block_d + (y_blocks + 1)*street_w])
+    ax.set_zlim([0, 1.5*max_block_height])
+
+    plot_obstacles(obs_list,ax)
+
+    plt.show()
+
+
+
+
 
 
 
