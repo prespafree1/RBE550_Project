@@ -1,5 +1,5 @@
 """
-RBE550, Project Group 1
+RBE550, Project Group 1 - AUT
 
 @author: Jesse Morzel
 """
@@ -16,6 +16,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 from matplotlib import interactive
 import time
+import numpy
+import os
 
 '''
 Define global_variables
@@ -39,6 +41,7 @@ h_map_file = "height_map2.txt"   # City block height map .txt file to use
 x_max = x_blocks*block_w + (x_blocks + 1)*street_w
 y_max = y_blocks*block_d + (y_blocks + 1)*street_w
 z_max = max_block_height/2
+obs_margin = 3              # Min clearance to obstacles (m)
 
 # RRT Variables
 trans_lim = 10
@@ -103,7 +106,7 @@ def make_3d_mat(file_name):
     :return: mat
     """
 
-    ################# Convert input file to 2D matrix of block heights
+    # Convert input file to 2D matrix of block heights
     height_mat = []
 
     try:
@@ -120,7 +123,7 @@ def make_3d_mat(file_name):
         mat = []
         return mat
 
-    ################# build 3D matrix
+    # Build 3D matrix
     mat = []
     mat_row = []
     mat_level = []
@@ -168,7 +171,7 @@ def make_obs_list(file_name):
     :param obs_list: list of obstacles where each obstacle defined as [p1, p2, p3, p4] where p = [x,y,z]
     :return: obs_list
     """
-    ################# Convert input file to 2D matrix of block heights
+    # Convert input file to 2D matrix of block heights
     height_mat = []
 
     try:
@@ -375,9 +378,9 @@ def check_collision(point, obs_list):
         z_obs_min = 0
         z_obs_max = obs_list[i][3][2]
 
-        if x_obs_min <= px <= x_obs_max:
-            if y_obs_min <= py <= y_obs_max:
-                if z_obs_min <= pz <= z_obs_max:
+        if x_obs_min - obs_margin <= px <= x_obs_max + obs_margin:
+            if y_obs_min - obs_margin <= py <= y_obs_max + obs_margin:
+                if z_obs_min - obs_margin <= pz <= z_obs_max + obs_margin:
                     collision = True
                     return collision
         i += 1
@@ -519,10 +522,10 @@ def compute_node_path(end_node):
     :return: path:
     """
     current_node = end_node
-    path = [[end_node.x, end_node.y, end_node.z, math.degrees(end_node.phi)]]
+    path = [end_node]
 
     while current_node.parent != []:
-        path.append([current_node.parent.x, current_node.parent.y, current_node.parent.z, math.degrees(current_node.parent.phi)])
+        path.append(current_node.parent)
         current_node = current_node.parent
 
     path.reverse()
@@ -646,6 +649,236 @@ def rrt_search(start,end,obs_list, fig):
     path = compute_node_path(new_node)
     return path, all_edges
 
+def bi_rrt_search(start,end,obs_list, fig):
+    """
+    Perform bi-directional RRT search from start to end, navigating through list of obstacles
+    :param start: start point [start_x, start_y, start_phi]
+    :param end: end point [end_x, end_y, end_phi]
+    :param obs_list: list of obstacles, each of which is list of vertices
+    :param fig: figure to update
+    :return: path: path from start to end. List of [x,y,phi,t,v,w]
+    """
+
+    # Start timer
+    ti = time.time()
+
+    # Init nodes
+    start_node = Node(start[0], start[1], start[2], start[3], [], [], cost=0)
+    end_node = Node(end[0], end[1], end[2], end[3], [], [], cost=0)
+
+    # Init trees
+    start_tree = [start_node]
+    end_tree = [end_node]
+    start_edges = []
+    end_edges = []
+
+    for k in range(max_tree_size):
+
+        # Randomly sample C-free
+        samp_free = False
+        while not samp_free:
+            samp_x = x_max*rand.random()
+            samp_y = y_max*rand.random()
+            samp_z = z_max * rand.random()
+
+            if not check_collision([samp_x, samp_y, samp_z], obs_list):
+                samp_free = True
+
+        samp_phi = math.pi*(2*rand.random()-1)
+        samp_node = Node(samp_x,samp_y,samp_z,samp_phi,[],[])
+
+        # If k is even, extend from start. Else, extend from end
+        if k % 2 == 0:
+            # Find nearest node in Start tree
+            start_nearest = find_nearest(samp_node,start_tree)
+
+            # Find motion from nearest node in Start tree to new node in direction of sampled node
+            dist_step = rand.random() * trans_lim
+            start_new = local_plan(start_nearest, samp_node, obs_list,dist_step)
+
+            # Check that path to new node is collision free
+            if start_new != None:
+                # Add new node to start tree with nearest node as parent
+                start_new.parent = start_nearest
+                start_tree.append(start_new)
+                start_edges.append(start_new.p_edge)
+
+                """
+                Dynamically plot edges
+                
+
+                line = plt3d.art3d.Line3D([start_nearest.x, start_new.x], [start_nearest.y, start_new.y], [start_nearest.z, start_new.z], color='c', linewidth=1)
+                fig.add_line(line)
+                plt.pause(0.01)"""
+
+                # Find nearest node in End tree to new Start node
+                end_nearest = find_nearest(start_new,end_tree)
+
+                # Find motion from nearest node in End tree to new node in direction of new Start node
+                dist_step = rand.random() * trans_lim
+                end_new = local_plan(end_nearest, start_new, obs_list,dist_step)
+
+                # Check that path to new node is collision free
+                if end_new != None:
+                    # Add new node to start tree with nearest node as parent
+                    end_new.parent = end_nearest
+                    end_tree.append(end_new)
+                    end_edges.append(end_new.p_edge)
+
+                    """
+                    Dynamically plot edges
+                    
+
+                    line = plt3d.art3d.Line3D([end_nearest.x, end_new.x], [end_nearest.y, end_new.y], [end_nearest.z, end_new.z], color='m', linewidth=1)
+                    fig.add_line(line)
+                    plt.pause(0.01)"""
+
+                    # Check if new End node is sufficiently close to new Start node
+                    if (abs(start_new.x - end_new.x) < dx_tol) and (abs(start_new.y - end_new.y) < dy_tol) and \
+                            (abs(start_new.z - end_new.z) < dz_tol) and (abs(start_new.phi - end_new.phi) < dphi_tol):
+
+                        print('SUCCESS!! bi-RRT path found!')
+
+                        # Connect End path to Start path
+                        current_node = end_new.parent
+                        next_node = current_node.parent
+                        next_path = current_node.p_edge
+
+                        current_node.parent = start_new
+                        current_node.p_edge = end_new.p_edge
+                        current_node.p_edge.reverse()
+
+                        while next_node != []:
+                            last_node = current_node
+
+                            next_next = next_node.parent
+
+                            current_node = next_node
+                            current_node.parent = last_node
+                            current_node.p_edge = next_path
+                            current_node.p_edge.reverse()
+
+                            if next_next != []:
+                                next_path = next_next.p_edge
+                            next_node = next_next
+
+                        path = compute_node_path(current_node)
+
+                        # End timer, print execution time
+                        tf = time.time()
+                        print('bi-RRT solution found in %s' % (tf - ti))
+
+                        # Compute solution distance
+                        path_cost = start_new.cost + end_new.cost
+                        print('bi-RRT solution cost: %s' % path_cost)
+
+                        return path, start_edges, end_edges
+        else:
+            # Find nearest node in End tree
+            end_nearest = find_nearest(samp_node, end_tree)
+
+            # Find motion from nearest node in End tree to new node in direction of sampled node
+            dist_step = rand.random() * trans_lim
+            end_new = local_plan(end_nearest, samp_node, obs_list,dist_step)
+
+            # Check that path to new node is collision free
+            if end_new != None:
+                # Add new node to End tree with nearest node as parent
+                end_new.parent = end_nearest
+                end_tree.append(end_new)
+                end_edges.append(end_new.p_edge)
+
+                """
+                Dynamically plot edges
+                
+                line = plt3d.art3d.Line3D([end_nearest.x, end_new.x], [end_nearest.y, end_new.y], [end_nearest.z, end_new.z], color='m', linewidth=1)
+                fig.add_line(line)
+                plt.pause(0.01)"""
+
+                # Find nearest node in Start tree to new End node
+                start_nearest = find_nearest(end_new, start_tree)
+
+                # Find motion from nearest node in Start tree to new node in direction of new End node
+                dist_step = rand.random() * trans_lim
+                start_new = local_plan(start_nearest, end_new, obs_list,dist_step)
+
+                # Check that path to new node is collision free
+                if start_new != None:
+                    # Add new node to start tree with nearest node as parent
+                    start_new.parent = start_nearest
+                    start_tree.append(start_new)
+                    start_edges.append(start_new.p_edge)
+
+                    """
+                    Dynamically plot edges
+                    
+                    line = plt3d.art3d.Line3D([start_nearest.x, start_new.x], [start_nearest.y, start_new.y], [start_nearest.z, start_new.z], color='c', linewidth=1)
+                    fig.add_line(line)
+                    plt.pause(0.01)"""
+
+                    # Check if new End node is sufficiently close to new Start node
+                    if (abs(start_new.x - end_new.x) < dx_tol) and (abs(start_new.y - end_new.y) < dy_tol) and \
+                            (abs(start_new.z - end_new.z) < dz_tol) and (abs(start_new.phi - end_new.phi) < dphi_tol):
+
+                        print('SUCCESS!! bi-RRT path found!')
+
+                        # Connect End path to Start path
+                        current_node = end_new.parent
+                        next_node = current_node.parent
+                        next_path = current_node.p_edge
+
+                        current_node.parent = start_new
+                        current_node.p_edge = end_new.p_edge
+                        current_node.p_edge.reverse()
+
+                        while next_node != []:
+                            last_node = current_node
+
+                            next_next = next_node.parent
+
+                            current_node = next_node
+                            current_node.parent = last_node
+                            current_node.p_edge = next_path
+                            current_node.p_edge.reverse()
+
+                            if next_next != []:
+                                next_path = next_next.p_edge
+                            next_node = next_next
+                            # print(next_node)
+
+                        path = compute_node_path(current_node)
+
+                        # End timer, print execution time
+                        tf = time.time()
+                        print('bi-RRT solution found in %s' % (tf - ti))
+
+                        # Compute solution distance
+                        path_cost = start_new.cost + end_new.cost
+                        print('bi-RRT solution cost: %s' % path_cost)
+
+                        return path, start_edges, end_edges
+
+        if k % 50 == 0:
+            print(k)
+
+    print('FAILED :( no biRRT path found')
+    path = compute_node_path(start_new)
+    return path, start_edges, end_edges
+
+# The function creates a shell script of waypoints given an array of points (x, y, z).
+def create_waypoint_file(waypoints):
+    # delete waypoint_script if exists, since going to append to it
+    if os.path.exists("waypoint_script.sh"):
+        os.remove("waypoint_script.sh")
+    # create waypoint_script.sh, and append waypoints.
+    f = open('waypoint_script.sh', 'a')
+    for i in waypoints:
+        np.savetxt(f, ["rosrun rotors_gazebo waypoint_publisher " + str(i.x) +
+                          " " + str(i.y) + " " + str(i.z) + " " + str(i.phi) + " 0 __ns:=firefly"], fmt='%s')
+    f.close()
+    os.chmod("waypoint_script.sh", 0o777)
+
+    return
 
 
 def main():
@@ -677,6 +910,7 @@ def main():
     start_point = [0, 0, 1, 0]
 
     # End in upper-right 20%
+    """
     end_free = False
     while not end_free:
         end_x = 0.75 * x_max + 0.2 * x_max * rand.random()
@@ -685,12 +919,19 @@ def main():
 
         if not check_collision([end_x, end_y, end_z], obs_list):
             end_free = True
-
+    
     end_phi = math.pi * (2 * rand.random() - 1)
+    
+    """
+    # For comparison with other algorithms, hardcode end point
+    end_x = 640
+    end_y = 640
+    end_z = 1
+    end_phi = 0
+
     end_point = [end_x, end_y, end_z, end_phi]
 
     print(end_point)
-
 
     """
     Init figure plot
@@ -717,13 +958,11 @@ def main():
     ax.scatter(start_point[0], start_point[1], start_point[2], color='c', s=20)
     ax.scatter(end_point[0], end_point[1], end_point[2], color='m', s=20)
 
-
     """
-    RRT search
-    """
+    RRT search (UNCOMMENT TO RUN)
+    
     raw_input('press enter to start RRT search')
     path, all_paths = rrt_search(start_point, end_point, obs_list, ax)
-
 
     # Plot results
     for i in range(len(all_paths)):
@@ -731,10 +970,34 @@ def main():
                                   [item[2] for item in all_paths[i]], color='c', linewidth=1)
         ax.add_line(line)
 
-    for i in range(len(path)-1):
+    for i in range(len(path) - 1):
+        line = plt3d.art3d.Line3D([path[i].x, path[i + 1].x], [path[i].y, path[i + 1].y],
+                                  [path[i].z, path[i + 1].z], color='lime', linewidth=1)
+        ax.add_line(line)
+    """
 
-        line = plt3d.art3d.Line3D([path[i][0], path[i+1][0]], [path[i][1], path[i+1][1]],
-                                  [path[i][2], path[i+1][2]], color='lime', linewidth=1)
+    """
+    bi-RRT search
+    """
+
+    plt.pause(0.01)
+    raw_input('press enter to start bi-RRT search')
+    path, start_paths, end_paths = bi_rrt_search(start_point, end_point, obs_list, ax)
+
+    # Plot results
+    for i in range(len(start_paths)):
+        line = plt3d.art3d.Line3D([item[0] for item in start_paths[i]], [item[1] for item in start_paths[i]],
+                                  [item[2] for item in start_paths[i]], color='c', linewidth=1)
+        ax.add_line(line)
+
+    for i in range(len(end_paths)):
+        line = plt3d.art3d.Line3D([item[0] for item in end_paths[i]], [item[1] for item in end_paths[i]],
+                                  [item[2] for item in end_paths[i]], color='m', linewidth=1)
+        ax.add_line(line)
+
+    for i in range(len(path) - 1):
+        line = plt3d.art3d.Line3D([path[i].x, path[i + 1].x], [path[i].y, path[i + 1].y],
+                                  [path[i].z, path[i + 1].z], color='lime', linewidth=1)
         ax.add_line(line)
 
     # Plot final plot
@@ -742,7 +1005,10 @@ def main():
     raw_input('press enter to finish')
     plt.show()
 
-
+    """
+    Create waypoint file
+    """
+    create_waypoint_file(path)
 
 
 if __name__ == "__main__":
