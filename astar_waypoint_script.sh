@@ -1,0 +1,12 @@
+rosrun rotors_gazebo waypoint_publisher 0 0 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 0 1 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 1 2 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 2 2 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 3 3 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 4 4 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 4 5 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 5 6 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 6 6 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 7 7 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 8 8 1 0 0 __ns:=firefly
+rosrun rotors_gazebo waypoint_publisher 9 9 1 0 0 __ns:=firefly
